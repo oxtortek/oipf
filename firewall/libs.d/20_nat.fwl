@@ -1,0 +1,109 @@
+echo -n "  Loading NAT Libraries ..."
+
+#
+# Da die Shell keine public Variablen definieren kann und wir
+# per Funktion angelegte Variablen mit variablen Namen brauchen,
+# machen wir das ganze mit einer temporären Datei...
+# Wir schreiben alle Variablen per Script plain in diese Datei
+# und laden diese danach...
+#
+
+### -> Code Bibliothek <- ###
+
+# temporäre Datei für dynamische Variablen
+TMPFILE=`mktemp -p $TMPDIR` || exit 1
+
+# register_nat_pair($pair_name,$ip_a,$ip_b)
+register_nat_pair()
+{
+  if test -z "$1" || test -z "$2" || test -z "$3"; then
+    echo 'Usage: register_nat_pair $pair_name $ip_a $ip_b' >&2
+    return 1
+  fi
+  nat_pair_name=$1
+  i=`grep "nat_${nat_pair_name}_[0-9]\+_a" $TMPFILE | wc -l`
+  echo "nat_${nat_pair_name}_${i}_a=\"$2\"" >> $TMPFILE
+  echo "nat_${nat_pair_name}_${i}_b=\"$3\"" >> $TMPFILE
+
+  return 0
+}
+
+
+# setup_nat_rules($pair_name,$mode,$shcmd1,$shcmd2)
+setup_nat_rules()
+{
+  if test -z "$1" || test -z "$2" || test -z "$3"; then
+    echo 'Usage: setup_nat_rules <fwd|rev|both> $pair_name $cmd_a [$cmd_b]' >&2
+    return 1
+  fi
+  if [ -f $TMPFILE ]; then
+    . $TMPFILE
+  else
+    echo
+    echo 'Warning: $TMPFILE not found.'
+    return 1
+  fi
+  do_fwd=0
+  do_rev=0
+  do_loop=0
+  case "$2" in
+    fwd)
+      do_fwd=1
+      cmd_fwd="$3"
+      ;;
+    rev)
+      do_rev=1
+      cmd_rev="$3"
+      ;;
+    both)
+      if [ -z "$4" ]; then
+        echo 'setup_nat_rules both requires definitely 3 parameters!' >&2
+        return 1
+      fi
+      do_fwd=1
+      do_rev=1
+      cmd_fwd="$3"
+      cmd_rev="$4"
+      ;;
+    loop)
+      if [ -z "$6" ]; then
+        echo 'setup_nat_rules loop requires definitely 5 parameters!' >&2
+        return 1
+      fi
+      do_loop=1
+      cmd_fwd1="$3"
+      cmd_fwd2="$4"
+      cmd_rev1="$5"
+      cmd_rev2="$6"
+      ;;
+    *)
+      echo 'Usage: setup_nat_rules <fwd|rev|both> $pair_name $cmd_a [$cmd_b]' >&2
+      return 1
+      ;;
+  esac
+  nat_pair_name=$1
+  size=`grep "nat_${nat_pair_name}_[0-9]\+_a" $TMPFILE | wc -l`
+  counter=0
+  while [ $counter -lt $size ]; do
+    var_a="nat_${nat_pair_name}_${counter}_a" # extern
+    var_b="nat_${nat_pair_name}_${counter}_b" # intern
+    if [ $do_fwd -eq 1 ]; then
+      { `printf "$cmd_fwd" "${!var_a}" "${!var_b}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_fwd" "${!var_a}" "${!var_b}"; }
+    fi
+    if [ $do_rev -eq 1 ]; then
+      { `printf "$cmd_rev" "${!var_b}" "${!var_a}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_rev" "${!var_b}" "${!var_a}"; }
+    fi
+    if [ $do_loop -eq 1 ]; then
+      { `printf "$cmd_fwd1" "${!var_b}" "${!var_a}" "${!var_b}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_fwd1" "${!var_b}" "${!var_a}" "${!var_b}"; }
+      { `printf "$cmd_fwd2" "${!var_b}" "${!var_b}" "${!var_a}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_fwd2" "${!var_b}" "${!var_b}" "${!var_a}"; }
+      { `printf "$cmd_rev1" "${!var_b}" "${!var_a}" "${!var_b}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_rev1" "${!var_b}" "${!var_a}" "${!var_b}"; }
+      { `printf "$cmd_rev2" "${!var_b}" "${!var_b}" "${!var_a}"` && echo -n '.'; } || { echo 'An error occured in the following rule:'; printf "$cmd_rev2" "${!var_b}" "${!var_b}" "${!var_a}"; }
+    fi
+    let counter++
+  done
+  return 0
+}
+
+
+
+echo " done"

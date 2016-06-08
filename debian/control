@@ -1,0 +1,25 @@
+Source: oipf
+Section: net
+Priority: optional
+Maintainer: Christian Schneider <christian@chrisn.dtdns.net>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.3
+Homepage: http://www.openipfilter.org/
+#Vcs-Git: git://git.debian.org/collab-maint/oipf.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/oipf.git;a=summary
+
+Package: oipf
+Architecture: all
+Depends: ${misc:Depends}, rsync, iptables, ulogd, git
+Pre-Depends: dpkg (>= 1.15.6~)
+Description: Open IP Filter is a feature rich framework around iptables
+ It was written to manage your iptables rulesets on HA clusters and deals with
+ loading the correct rules depending on the host. This way, you can synchronize
+ your rulesets and OIPF takes care of the hostrole (master|slave|all).
+ .
+ Additionally it helps to avoid mistakes during configuration. You can check
+ your ruleset for syntax errors, can save and load it as iptables dump and many
+ more...
+ .
+ Support for loading a new ruleset and waiting for the user to confirm it,
+ otherwise load the previous rules is planned for the future.

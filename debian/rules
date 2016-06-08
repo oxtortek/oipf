@@ -1,0 +1,26 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+VERSION=$(shell dpkg-parsechangelog -c1 | grep ^Version | cut -d\  -f2)
+DATE=$(shell date '+%d %b %Y')
+
+%:
+	dh $@
+
+
+override_dh_auto_install:
+	dh_auto_install
+	sed -i "s/#VERSION#/$(VERSION)/" $(CURDIR)/debian/oipf/usr/sbin/oipf
+	# prepared to update date and maybe version in manpage
+	# after dh_installman is run, the manpage in $(CURDIR)/debian/oipf/usr/share/man/man8/oipf
+	# is gzipped - so it's tzo late to do this replacement here.
+	# Need to find a better place (maybe create build dir, copy to builddir, replace in builddir,
+	# change d/oipf.manpages to pick the manpage from builddir, cleanup)
+	#sed -i "s/#DATE#/$(DATE)/" $(CURDIR)/debian/oipf/usr/share/man/man8/oipf

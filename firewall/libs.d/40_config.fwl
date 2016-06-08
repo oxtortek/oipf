@@ -1,0 +1,301 @@
+echo -n "  Loading Config Libraries ..."
+
+
+declare -a REGISTERED_INTERFACES
+declare -a REGISTERED_HOSTS
+declare -a REGISTERED_NETS
+declare -a REGISTERED_PORTS
+
+# register_interface() legt alle benötigten variablen für ein Interface an
+register_interface()
+{
+  if echo "$@" | grep -q '@'; then
+    echo "Sorry, but you must not use '@' in any of your parameters."
+    return 1
+  fi
+  role=
+  name=
+  device=
+  ip=
+  network=
+  broadcast=
+  registerbcast=0
+  replicationlink=0
+  sourcerouting=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -r|--role)
+        case "$2" in
+          master|slave|all) role=$2; shift;;
+          *) echo "unknown role \"$2\""; return 1;;
+        esac;;
+      -n|--name)
+        if [ -n "$2" ]; then name=$2; shift;
+        else echo "you must specify an interface name"; return 1
+        fi;;
+      -D|--device)
+        case "$2" in
+          eth*|vlan*|bond*|tun*) device=$2; shift;;
+          *) echo "unknown device \"$2\""; return 1;;
+        esac;;
+      -I|--ip)
+        if [ -n "$2" ]; then ip=$2; shift;
+        else echo "you must specify an ip address"; return 1
+        fi;;
+      -N|--network)
+        if [ -n "$2" ]; then network=$2; shift;
+        else echo "you must specify a network address"; return 1
+        fi;;
+      -B|--broadcast)
+        if [ -n "$2" ]; then broadcast=$2; shift;
+        else echo "you must specify a broadcast address"; return 1
+        fi;;
+      -X|--register-bcast)
+        registerbcast=1;;
+      -R|--replication-link)
+        replicationlink=1;;
+      -S|--enable-source-routing)
+        sourcerouting=1;;
+    esac
+    shift
+  done
+  # and now ... action! :)
+  if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+    # checks if all params are set
+    if test -z "$name" || test -z "$role" || test -z "$device" || test -z "$network" || test -z "$broadcast"; then
+      echo -e "\nUsage: register_interface -n|--name <name> -r|--role <role> -D|--device <dev>\n\t -I|--ip <a.b.c.d> -N|--network <a.b.c.d/n> -B|--broadcast <a.b.c.d>\n\t [-X|--register-bcast] [-R|--replication-link]\n\t [-S|--enable-source-routing]"
+      return 1
+    fi
+    # set some global vars
+    export IF_$name=$device
+    export IP_$name=$ip
+    export NET_$name=$network
+    export BCAST_$name=$broadcast
+    # create ipsets
+    #$IPSET -N NET_$name ipmap --network $network
+    #now you must fill this set with ip's... per while loop? don't know...
+    # register the broadcast address if needed
+    if [ $registerbcast -eq 1 ]; then
+      register_bcast_addr $broadcast
+    fi
+    # set the interface for our replication link
+    if [ $replicationlink -eq 1 ]; then
+      export IF_FWREPLI $device
+    fi
+    # write to global vars
+    REGISTERED_INTERFACES+=" $name@$device@$ip@$network@$broadcast@$registerbcast"
+    if echo $device | egrep -qv '^tun[0-9]+'; then
+      # -- Set some kernel vars specific to this interface --
+      # Prevent ARP Flux
+      # http://linux-ip.net/html/ether-arp.html#ether-arp-flux
+      /sbin/sysctl -q -w net.ipv4.conf.$device.arp_filter=1
+      /sbin/sysctl -q -w net.ipv4.conf.$device.arp_ignore=1
+      /sbin/sysctl -q -w net.ipv4.conf.$device.arp_announce=2
+      # Don't accept source routed packets. Attackers can use source routing to
+      # generate traffic pretending to be from inside your network, but which
+      # is routed back along the path from which it came, namely outside, so
+      # attackers can compromise your network. Source routing is rarely used
+      # for legitimate purposes.
+      /sbin/sysctl -q -w net.ipv4.conf.$device.accept_source_route=$sourcerouting
+      # Log spoofed packets, source routed packets, redirect packets.
+      #/sbin/sysctl -q -w net.ipv4.conf.$device.log_martians=1
+      /sbin/sysctl -q -w net.ipv4.conf.$device.log_martians=0
+    fi
+  fi
+  return 0
+}
+
+# register_net() legt alle benötigten variablen für ein Netzwerk an
+register_net()
+{
+  if echo "$@" | grep -q '@'; then
+    echo "Sorry, but you must not use '@' in any of your parameters."
+    return 1
+  fi
+  role=
+  name=
+  network=
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -r|--role)
+        case "$2" in
+          master|slave|all) role=$2; shift;;
+          *) echo "unknown role \"$2\""; return 1;;
+        esac;;
+      -n|--name)
+        if [ -n "$2" ]; then name=$2; shift;
+        else echo "you must specify an interface name"; return 1
+        fi;;
+      -N|--network)
+        if [ -n "$2" ]; then network=$2; shift;
+        else echo "you must specify a network address"; return 1
+        fi;;
+    esac
+    shift
+  done
+  # and now ... action! :)
+  if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+    # checks if all params are set
+    if test -z "$name" || test -z "$role" || test -z "$network"; then
+      echo -e "\nUsage: register_net -n|--name <name> -r|--role <role> -N|--network <a.b.c.d/n>"
+      return 1
+    fi
+    # set some global vars
+    export NET_$name=$network
+    # write to global vars
+    REGISTERED_NETS+=" $name@$network"
+  fi
+  return 0
+}
+
+# register_host() legt alle benötigten Variablen für einen Host an
+register_host()
+{
+  usage="\nUsage: register_host -n|--name <name> -r|--role <master|slave|all> -t|--type <single|list|netlist> -I|--ip <a.b.c.d>"
+  if echo "$@" | grep -q '@'; then
+      echo "Sorry, but you must not use '@' in any of your parameters."
+      return 1
+  fi
+  role=
+  name=
+  type=
+  ip=
+  while [ "$#" -gt 0 ]; do
+      case "$1" in
+          -r|--role)
+              case "$2" in
+                  master|slave|all) role=$2; shift;;
+                  *) echo "unknown role \"$2\""; return 1;;
+              esac;;
+          -n|--name)
+              if [ -n "$2" ]; then name=$2; shift;
+              else echo "you must specify an interface name"; return 1
+              fi;;
+          -t|--type)
+              case "$2" in
+                  single|list|netlist) type=$2; shift;;
+                  *) echo "unknown type \"$2\""; return 1;;
+              esac;;
+          -I|--ip)
+              if [ -n "$2" ]; then ip=$2; shift;
+              else echo "you must specify an ip address or a komma seperated list"; return 1
+              fi;;
+      esac
+      shift
+  done
+  # and now ... action! :)
+  if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+      # checks if all params are set
+      if test -z "$name" || test -z "$role" || test -t "$type" || test -z "$ip"; then
+          echo -e $usage
+          return 1
+      fi
+      # cleanup delimiters
+      ip=$(echo "$ip" | sed -r 's/[\t, ]+/,/g')
+      # did port type and entered format match?
+      case $type in
+          single) if ! echo "$ip" | grep -q -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then echo -e $usage; return 1; fi;;
+          list) if ! echo "$ip" | grep -q -E '^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)(,[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)*$'; then echo -e $usage; return 1; fi;;
+          netlist) if ! echo "$ip" | grep -q -E '^([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)(,[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+)*$'; then echo -e $usage; return 1; fi;;
+      esac
+      # set some global vars
+      case $type in
+          single)
+              export IP_$name=$ip
+              ;;
+          list)
+              export IPLIST_$name="`echo $ip | sed 's/,/ /g'`"
+              ;;
+          netlist)
+              export NETLIST_$name="`echo $ip | sed 's/,/ /g'`"
+              ;;
+      esac
+      # write to global vars
+      REGISTERED_HOSTS+=" $name@$type@$ip"
+  fi
+  return 0
+}
+
+# register_port() legt alle benötigten Variablen für einen Port an
+register_port()
+{
+  usage="\nUsage: register_port -n|--name <name> -r|--role <master|slave|all> -t|--type <single|range|list> -P|--port <n>"
+  if echo "$@" | grep -q '@'; then
+      echo "Sorry, but you must not use '@' in any of your parameters."
+      return 1
+  fi
+  role=
+  name=
+  type=
+  port=
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -r|--role)
+        case "$2" in
+          master|slave|all) role=$2; shift;;
+          *) echo "unknown role \"$2\""; return 1;;
+        esac;;
+      -n|--name)
+        if [ -n "$2" ]; then name=$2; shift;
+        else echo "you must specify an interface name"; return 1
+        fi;;
+      -t|--type)
+        case "$2" in
+          single|range|list) type=$2; shift;;
+          *) echo "unknown type \"$2\""; return 1;;
+        esac;;
+      -P|--port)
+        if [ -n "$2" ]; then port=$2; shift;
+        else echo "you must specify a port number"; return 1
+        fi;;
+    esac
+    shift
+  done
+  # and now ... action! :)
+  if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+    # checks if all params are set
+    if test -z "$name" || test -z "$role" || test -t "$type" || test -z "$port"; then
+      echo -e $usage
+      return 1
+    fi
+    # cleanup delimiters
+    port=$(echo "$port" | sed -r 's/[\t, ]+/,/g')
+    # did port type and entered format match?
+    case $type in
+      single) if ! echo "$port" | grep -q -E '^[0-9]+$'; then echo -e $usage; return 1; fi;;
+      range) if ! echo "$port" | grep -q -E '^[0-9]+:[0-9]+$'; then echo -e $usage; return 1; fi;;
+      list) if ! echo "$port" | grep -q -E '^([0-9]+,)+[0-9]+$'; then echo -e $usage; return 1; fi;;
+    esac
+    # set some global vars
+    case $type in
+      single)
+        export p_$name=$port
+        # call_ipset -r $role -N p_$name portmap --from $port --to $port
+        # call_ipset -r $role -A p_$name $port
+        ;;
+      range)
+        export p_$name=$port
+        # from=`echo $port | cut -d: -f1`
+        # to=`echo $port | cut -d: -f2`
+        # call_ipset -r $role -N p_$name portmap --from $from --to $to
+        # counter=$from
+        # while [ $counter -le $to ]; do $IPSET -A p_$name $counter; let counter++; done
+        ;;
+      list)
+        #export plist_$name="`echo $port | sed 's/,/ /g'`"
+        export plist_$name=$port
+        # tmp=(`echo $port | sed 's/,/ /g'`)
+        # lastelemindex=$((${#tmp[@]}-1))
+        # call_ipset -r $role -N plist_$name portmap --from ${tmp[0]} --to ${tmp[$lastelemindex]}
+        # for elem in `echo $port | sed 's/,/ /g'`; do call_ipset -r $role -A plist_$name $elem; done
+        ;;
+    esac
+    # write to global vars
+    REGISTERED_PORTS+=" $name@$type@$port"
+  fi
+  return 0
+}
+
+
+
+echo " done"

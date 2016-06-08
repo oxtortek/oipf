@@ -1,0 +1,405 @@
+.\" Manpage for OIPF \- Open IP Filter
+.\"
+.\" Macro overview:
+.\" http://www.gnu.org/software/groff/manual/html_node/Man-usage.html
+.\" http://www.gnu.org/software/groff/manual/html_node/Man-font-macros.html
+.\"
+.TH man 8 "10 Aug 2015" "4.2.1" "OIPF \- Open IP Filter man page"
+.SH NAME
+OIPF \- Open IP Filter firewall framework supporting master/slave systems
+
+.SH SYNOPSIS
+oipf <help|load|save|reload|sync|syntax|show|git|log|glog>
+[git subcommands] | [show subcommand] [--force-role <master|slave>]
+
+.SH DESCRIPTION
+Usage:
+.I "oipf <help|load|save|reload|sync|syntax|show-vars|git|log|glog>"
+.I "[git subcommands] | [show subcommand]  [--force-role <master|slave>]"
+
+The main script \fI/usr/sbin/oipf\fP accepts the following options:
+.TP
+\fBhelp\fP
+Displays the oipf man page.
+.TP
+\fBreload\fP
+Loads all libraries, config and rule files, builds netfilter rules and activates
+them in the kernel.
+.TP
+\fBsave\fP
+Dumps all active rules to /var/lib/oipf/iptdumps/active.
+.TP
+\fBload\fP
+Loads all rules from /var/lib/oipf/iptdumps/active.
+.TP
+\fBsync\fP
+Synchronises firewall slave with firewall master.
+.TP
+\fBsyntax\fP
+This is a syntax check which loads /bin/true in place of /sbin/iptables. So you can
+detect all syntax errors in bash, before you load the ruleset and maybe lock yourself
+out.
+.TP
+\fBshow\fP SUBCOMMAND
+\fBvars\fP   Lists all defined objects from conf.d/*.fwc files.
+.br
+\fBrules\fP  Lists active ruleset from kernelspace.
+.TP
+\fBstatus\fP
+Outputs loaded ruleset master|slave or none, if no rules after system reboot are
+loaded for example. The status is saved in a file. If absent, status is undefined.
+.TP
+\fBgit\fP
+GIT wrapper - sets --git-dir and --work-tree to configured values and calls GIT.
+.TP
+\fBlog\fP
+Calls tail -f /var/log/ulog/syslogemo.log optionally followed by egrep. To filter
+the output, you can specify a regular expression for egrep.
+.TP
+\fBglog\fP
+Calls egrep on the log file /var/log/ulog/syslogemo.log. To filter the output,
+you can specify a regular expression for egrep.
+.TP
+\fB\-\-force-role\fP ROLE
+Normaly, the firewall role is detected automatically by comparing the machines
+short hostname `hostname -s` with the content of the variables $HOSTNAME_MASTER
+and $HOSTNAME_SLAVE defined in /usr/sbin/oipf.
+.br
+This parameter becomes handy, when the firewalls are operation in failover mode
+(role master on slave fw, role slave on master fw). If you are logged in on the
+host, who's default role is slave, but you must reload your master ruleset, you
+need to specify this option as last argument to override the aute-role-detection
+feature.
+.P
+Without or with misspelled options, oipf outputs a brief summary.
+
+
+.SS Firewall States
+
+This firewall framework is designed to simplify the writing of iptables rules for
+a single machine firewall and an active-passive firewall ha cluster.
+
+.B "Single host"
+To use this framework for a single firewall host, set the variable $HOSTNAME_MASTER
+to the machines short hostname. The string must match the output obtained from
+command `hostname -s`. The variable $HOSTNAME_SLAVE for the non-existing slave
+host should be set to 'undefined'.
+.br
+Every configuration setting or rule definition should use \fB--role master\fP as
+argument. Setting role to \fBall\fP would also work, but is not recommended because,
+if you ever will add a second host as slave, you have to rewrite almost all role
+definitions to master.
+
+.B "HA-Cluster"
+As in single host mode, you have to set $HOSTNAME_MASTER and $HOSTNAME_SLAVE to
+the appropriate values for master and slave host.
+.TP
+\fB\-\-role master\fP
+Every rule on the master node must use \fB--role master\fP which means, that if
+you want to forward traffic from an internal lan to the internet, use 'master'.
+If you have any other service running on the active firewall, which must be
+reachable and therefore need some iptables rules, executed in master mode. Outgoing
+requests like dns, ntp or http for system updates must also have their corresponding
+rules.
+.TP
+\fB\-\-role slave\fP
+In most circumstances, the inactive firewall is not really switched off. There are
+several services like ntpd, conntrackd, corosync with pacemaker and of course,
+system updates, that require network reachability. For those, you have to write some
+iptables rules, that fit only on the slave host. Use \fB--role slave\fP for them.
+.TP
+\fB\-\-role all\fP
+If you have rules, that are identical on master and slave node, you don't have to write
+them twice. Just use \fB--role all\fP for them and they get executed on master and slave
+node.
+.P
+Note that not only iptables rules support this role selection. Every configuration
+helper function must also be called with the --role parameter.
+
+.SS Builtin Functions (firewall rule definition)
+
+.TP
+.B call_ipt()
+The primary wrapper function for iptables calls.
+.br
+Usage:
+.I "call_ipt --role|-r <master|slave|all> <iptables-parameters>"
+.RS
+.TP
+\fB\-r\fP, \fB\-\-role\fP ROLE
+Defines in which firewall state this function should be executed. See subsection \fBFirewall States\fP.
+.br
+ROLE can be \fBmaster\fP, \fBslave\fP or \fBall\fP.
+.TP
+Example
+Append a simple rule at FORWARD chain to allow ICMP traffic from eth0 to eth1.
+.br
+The IPTABLES rule would look like:
+.I "iptables -A FORWARD -p ICMP -i eth0 -o eth1 -j ACCEPT"
+.br
+With call_ipt on the master firewall you have to write:
+.I "call_apt -r all -A FORWARD -p ICMP -i eth0 -o eth1 -j ACCEPT"
+.br
+Simply replace \fIiptables\fP with \fIcall_apt -r <role>\fP and you are done.
+
+
+
+.SS Builtin Functions (configuration setup)
+
+.TP
+.B register_interface()
+This function registers a complete set of variables for an ethernet interface.
+.br
+Usage:
+.I "register_interface -n|--name <name> -r|--role <role> -D|--device <dev>\n\t -I|--ip <a.b.c.d> -N|--network <a.b.c.d/n> [-X|--register-bcast]"
+.RS
+.TP
+\fB\-r\fP, \fB\-\-role\fP ROLE
+Defines in which firewall state this function should be executed. See subsection \fBFirewall States\fP.
+.br
+ROLE can be \fBmaster\fP, \fBslave\fP or \fBall\fP.
+.TP
+\fB\-n\fP, \fB\-\-name\fP NAME
+Sets a descriptive name for the interface.
+.TP
+\fB\-D\fP, \fB\-\-device\fP DEVICE
+DEVICE can either be eth, vlan, bond or tun followed by a number. As example: "eth0", "tun15", etc.
+.TP
+\fB\-I\fP, \fB\-\-ip\fP IP
+Sets the device ip address. Example: \-\-ip '192.168.1.1'
+.TP
+\fB\-N\fP, \fB\-\-network\fP NETWORK
+Sets the network address in cidr notation. Example: \-\-network '192.168.1.0/24'
+.TP
+\fB\-B\fP, \fB\-\-broadcast\fP ADDRESS
+Sets the network broadcast address. If used with \fB\-X\fP, all broadcast addresses are collected and used during "Loading internal rules" phase to drop silently broadcast traffic like smb broadcasts and so on.
+.TP
+\fB\-X\fP, \fB\-\-register-bcast\fP
+If set, the with \fB\-B\fP defined broadcast address is added to the list of broadcast adresses, who are used to discard broadcast packets.
+.RE
+
+.TP
+.B register_net()
+This function should be used to define network variables.
+.br
+Usage:
+.I "register_net -n|--name <name> -r|--role <role> -N|--network <a.b.c.d/n>"
+.RS
+.TP
+\fB\-r\fP, \fB\-\-role\fP ROLE
+Defines in which firewall state this function should be executed. See subsection \fBFirewall States\fP.
+.br
+ROLE can be \fBmaster\fP, \fBslave\fP or \fBall\fP.
+.TP
+\fB\-n\fP, \fB\-\-name\fP NAME
+Sets a descriptive name for the network.
+.TP
+\fB\-N\fP, \fB\-\-network\fP NETWORK
+Sets the network address in cidr notation. Example: \-\-network '192.168.1.0/24'
+.RE
+
+.TP
+.B register_host()
+This function should be used to define network variables.
+.br
+Usage:
+.I "register_host -n|--name <name> -r|--role <master|slave|all> -t|--type <single|list|netlist> -I|--ip <a.b.c.d>"
+.RS
+.TP
+\fB\-r\fP, \fB\-\-role\fP ROLE
+Defines in which firewall state this function should be executed. See subsection \fBFirewall States\fP.
+.br
+ROLE can be \fBmaster\fP, \fBslave\fP or \fBall\fP.
+.TP
+\fB\-n\fP, \fB\-\-name\fP NAME
+Sets a descriptive name for the host.
+.TP
+\fB\-t\fP, \fB\-\-type\fP TYPE
+There are three different types of host definitions available:
+.br
+\fIsingle\fP  : Defines one hosts ip address. Variable prefix: \fIIP_\fP
+.br
+\fIlist\fP    : Defines a list of hosts. Use a comma to separate them from each other. Variable prefix: \fIIPLIST_\fP
+.br
+\fInetlist\fP : Defines a list of network adresses (hosts with netmask). Variable prefix: \fINETLIST_\fP
+.TP
+\fB\-I\fP, \fB\-\-ip\fP IP
+Sets the hosts ip address, a list of ip addresses or network adresses.
+.br
+Some examples:
+.br
+\-\-type single \-\-ip '192.168.1.1'
+.br
+\-\-type list \-\-ip '192.168.1.1, 192.168.100.23, 10.10.10.10'
+.br
+\-\-type netlist \-\-ip '192.168.1.0/24, 10.0.0.0/8, 127.0.0.1/32'
+.RE
+
+.TP
+.B register_port()
+This function should be used to define port variables.
+.br
+Usage:
+.I "register_port -n|--name <name> -r|--role <master|slave|all> -t|--type <single|range|list> -P|--port <n>"
+.RS
+.TP
+\fB\-r\fP, \fB\-\-role\fP ROLE
+Defines in which firewall state this function should be executed. See subsection \fBFirewall States\fP.
+.br
+ROLE can be \fBmaster\fP, \fBslave\fP or \fBall\fP.
+.TP
+\fB\-n\fP, \fB\-\-name\fP NAME
+Sets a descriptive name for the port.
+.TP
+\fB\-t\fP, \fB\-\-type\fP TYPE
+There are three different types of host definitions available:
+.br
+\fIsingle\fP : Defines a single port. Variable prefix: \fIp_\fP
+.br
+\fIrange\fP  : Defines a port range. \fIp_\fP
+.br
+\fIlist\fP   : Defines a list of ports. Variable prefix: \fIplist_\fP
+.TP
+\fB\-P\fP, \fB\-\-port\fP PORT
+Sets the port number, port range or a list of ports.
+.br
+Some examples:
+.br
+\-\-type single \-\-name 'dns' \-\-port '53'
+.br
+\-\-type range \-\-name 'high' \-\-port '1024:65535'
+.br
+\-\-type list \-\-name 'allowed_services_tcp' \-\-port '22, 80, 443'
+.RE
+
+
+.SH FILES
+.TP
+.B /etc/oipf/
+Configuration and application base folder.
+
+.TP
+.B /etc/oipf/conf.d/
+This directory contains all configuration files where variable definitions should take
+place. The file extension must be \fB.fwc\fP and the order in which they are read, can
+be tuned with the first 2 numbers.
+
+As an example, you may have the following files in /etc/oipf/conf.d/:
+
+.RS
+.RS
+00_interfaces.fwc
+.br
+01_networks.fwc
+.br
+02_ports.fwc
+.br
+05_hosts.fwc
+.br
+10_nattable.fwc
+.br
+30_customers.fwc
+.RE
+.RE
+
+.TP
+.B /etc/oipf/rules.d/
+This directory contains all custom firewall rule files.
+
+As an example, you may have the following files in /etc/oipf/rules.d/:
+
+.RS
+.RS
+00_heartbeat.fwr
+.br
+01_nat.fwr
+.br
+02_rdmz.fwr
+.br
+02_reply.fwr
+.br
+03_split.fwr
+.br
+15_ssh.fwr
+.br
+16_vpn.fwr
+.br
+19_dns.fwr
+.br
+20_netinf.fwr
+.br
+25_db.fwr
+.br
+30_messaging.fwr
+.br
+30_web.fwr
+.br
+40_msn.fwr
+.br
+50_ftps.fwr
+.br
+51_ftp.fwr
+.br
+60_diverse.fwr
+.br
+60_maintenance.fwr
+.br
+80_netadm.fwr
+.RE
+.RE
+
+.TP
+.B /usr/share/oipf/libs.d/
+This directory contains all shell library functions.
+
+As an example, you may have the following files in /usr/share/oipf/libs.d/:
+
+.RS
+.RS
+00_base.fwl
+.br
+20_nat.fwl
+.br
+40_config.fwl
+.RE
+.RE
+
+.TP
+.B /usr/sbin/oipf
+Main script. That's what you run if you want to reload any changes, if you want to save your changes, if you need help about the options or want to query git or the logfile...
+
+
+.SH SEE ALSO
+
+.BR iptables (8),
+.BR iptables-apply (8),
+.BR iptables-save (8),
+.BR iptables-restore (8),
+.BR ulogd (8),
+.BR rsync (1),
+.BR ipset (8),
+.BR conntrackd (8)
+
+.SH BUGS
+.TP
+P2P interfaces could not be defined with register_interface() function.
+
+.SH TODO
+Implement and document IPv6 functionality.
+
+Document the NAT helper functions.
+
+Document the ipset helper functions.
+
+Document
+/var/lib/oipf/
+/var/lib/oipf/ruleset-fw-master.status
+/var/lib/oipf/ruleset-fw-slave.status
+/usr/share/oipf/base-functions.fwl
+
+Document functions \fBipt_chain_beginn()\fP and \fBipt_chain_end()\fP.
+
+For more todos please also have a look in file /usr/share/doc/oipf/TODO.gz
+
+.SH AUTHOR
+Christian Schneider <christian.schneider@aoe.com>

@@ -1,0 +1,126 @@
+oipf (4.2.2) trusty; urgency=low
+
+  [ Christian Schneider ]
+  * Updated mail address in manpage.
+
+  [ Mark Riede ]
+  * Raising conntrack limit from 65536 to 256000 
+
+ -- Mark Riede <mark.riede@aoe.com>  Thu, 28 Apr 2016 15:00:23 +0200
+
+oipf (4.2.1) trusty; urgency=low
+
+  * Fixed 'oipf show' command.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Mon, 12 Oct 2015 16:47:24 +0200
+
+oipf (4.2.0) trusty; urgency=low
+
+  * Updated author information.
+  * Reworked method to call GIT - now in full wrapper mode.
+  * Updated manpage.
+  * Updated configuration file oipf.conf.
+  * Updated file debian/TODO.
+  * Added new action "show-vars" to oipf command.
+  * Fixed output messages (for built-in rules).
+  * Updated library files base.fwl and config.fwl:
+    + Function `register_port -t list` now registers a comma seperated list
+      of ports instead of space seperated. Since -m multiport is available,
+      there is no need to loop over port lists. Instead, the --ports,
+      --sports and --dports multiport targets needs it comma seperated.
+    + Function register_host called with type list or netlist and function
+      register port with list target now also accepts spaces as seperators.
+  * Added build-in state match on --state INVALID (actions: log & drop).
+  * Added --line-buffered option to grep for better realtime display.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Thu, 08 Oct 2015 16:29:18 +0200
+
+oipf (4.1.9) trusty; urgency=low
+
+  * Really added the --color option to grep
+  * Updated TODO file
+  * Renamed and moved /etc/oipf/.git folder to /var/lib/oipf/.oipf-git
+    to avoid conflicts with etckeeper by specifying --git-dir on all
+    git invocations.
+  * Replaced subshell code to invoke git in /etc/oipf by specifying
+    --work-tree on all git invocations.
+  * Updated manpage and added code to install into /usr/share/man/man8
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Tue, 28 Jul 2015 14:41:43 +0200
+
+oipf (4.1.8) trusty; urgency=low
+
+  * Modified `oipf log`
+    + Replaced optional grep by egrep
+    + Added --color option to egrep
+  * Added `oipf glog` feature to just grep the whole firewall log for a
+    searchterm. Extended regular expressions are enabled by the use of egrep.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Tue, 21 Jul 2015 16:40:14 +0200
+
+oipf (4.1.7) trusty; urgency=low
+
+  * Make oipf log more verbose.
+  * Added function get_exclusive_lock which uses flock(1) to aquire an
+    exclusive lock and avoid multiple instances od OIPF running at the
+    same time.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Mon, 27 Apr 2015 11:50:29 +0200
+
+oipf (4.1.6) trusty; urgency=low
+
+  * Added connection tracking and nat helper modules for FTP.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Wed, 04 Mar 2015 14:27:34 +0100
+
+oipf (4.1.5) trusty; urgency=low
+
+  * Added 'oipf log [log filter]' comand to oipf.
+  * Added --reject-with icmp-admin-prohibited to REJECT target.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Tue, 03 Feb 2015 13:44:25 +0100
+
+oipf (4.1.4) trusty; urgency=low
+
+  * Small fixes in d/postinst.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Wed, 17 Dec 2014 18:37:19 +0100
+
+oipf (4.1.3) trusty; urgency=low
+
+  * Added manpage.
+  * Added new command 'git' with several subcommands to oipf.
+  * Added 'git config' code to d/postinst.
+  * Added configurable source-routing setting per interface.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Wed, 17 Dec 2014 17:39:24 +0100
+
+oipf (4.1.2) trusty; urgency=low
+
+  * Fixed unknown parameter --nflog-nlgroup introduced in 4.1.1.
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Thu, 13 Nov 2014 18:58:40 +0100
+
+oipf (4.1.1) trusty; urgency=low
+
+  * Make use of new logging function ipt_chain_log
+  * Fixes in parameter parsing in ipt_chain_begin and ipt_chain_end
+  * Minor text changes
+  * Don't log RETURN targets if limited logging is enabled
+  * Fixed d/rules and Makefile for proper builds
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Thu, 13 Nov 2014 18:49:10 +0100
+
+oipf (4.1.0) trusty; urgency=low
+
+  * Added support for NFLOG target
+  * Added new configuration variable LOGGING_SYSTEM
+  * Added new library containing the functions ipt_chain_begin and ipt_chain_end
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Wed, 12 Nov 2014 14:45:44 +0100
+
+oipf (4.0.0) trusty; urgency=low
+
+  * Initial packaged release
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Fri, 07 Nov 2014 17:51:53 +0100

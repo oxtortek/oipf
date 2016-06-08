@@ -1,0 +1,112 @@
+echo -n "  Loading Base Libraries ..."
+
+
+# Als Ersatz für /sbin/iptables wird diese Funktion benutzt.
+# Sie berücksichtigt master/slave und active/inactive!
+#
+# call_ipt [--role|-r master|slave|all] <iptables-parameters>
+#
+call_ipt()
+{
+    role=''
+    case $1 in
+        --role|-r)
+	    shift
+	    case $1 in
+		master|slave|all)
+		    role=$1
+		    shift
+		    ;;
+		*)
+		    echo "Unknown role $1"
+		    return 1
+		    ;;
+	    esac
+	    ;;
+	*)
+	    ;;
+    esac
+    if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+        $IPTABLES $@
+	if [ $? -ne 0 ]; then
+	    echo "An error occurred in the following rule:"
+	    echo "$IPTABLES $@"
+	fi
+	echo -n "."
+    fi
+}
+
+# Als Ersatz für /usr/sbin/ipset wird diese Funktion benutzt.
+# Sie berücksichtigt master/slave und active/inactive!
+#
+# call_ipset [--role|-r master|slave|all] <ipset-parameters>
+#
+call_ipset()
+{
+return 0
+    role=''
+    case $1 in
+        --role|-r)
+	    shift
+	    case $1 in
+		master|slave|all)
+		    role=$1
+		    shift
+		    ;;
+		*)
+		    echo "Unknown role $1"
+		    return 1
+		    ;;
+	    esac
+	    ;;
+	*)
+	    ;;
+    esac
+    if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+        $IPSET $@
+	if [ $? -ne 0 ]; then
+	    echo "An error occurred in the following rule:"
+	    echo "$IPSET $@"
+	fi
+	echo -n ","
+    fi
+}
+
+# set_desc() wird verwenden, um die folgenden Regeln zu Dokumentieren
+set_desc()
+{
+    role=''
+    case $1 in
+        --role|-r)
+	    shift
+	    case $1 in
+		master|slave|all)
+		    role=$1
+		    shift
+		    ;;
+		*)
+		    echo "Unknown role $1"
+		    return 1
+		    ;;
+	    esac
+	    ;;
+	*)
+	    ;;
+    esac
+    if [ "$role" == "all" ] || [ "$role" == "$hostrole" ]; then
+	echo "$@" > /dev/null
+    fi
+
+}
+
+register_bcast_addr()
+{
+    if [ "$1" != "" ]; then
+	BROADCASTADDRESSES+=" $1"
+    fi
+    return 0
+}
+register_bcast_addr "255.255.255.255"
+
+
+echo " done"

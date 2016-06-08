@@ -1,0 +1,17 @@
+In this file we collect all upcomming tasks
+-------------------------------------------------------------------------------
+* Support NFLOG target and provide a function to end a chain including logging
+  and a final DROP or REJECT. [DONE]
+* Implement a ruleset rollback if the user is not able to respond anymore after
+  a new ruleset was applied.
+* Exit if there is an error during config and library load
+* Place the manpage in the packet [DONE]
+* Implement functions to search for objects already defined and something like "Show where its used"
+* register_host currently supports three types of objects:
+  + "single" (host)
+  + "list" (of hosts)
+  + "netlist" (list of nets)
+  register_net not even supports different types of objects.
+  Why not add a fourth type "net"? Or move "netlist" to register_net function? Thats confusing!
+* Update manpage (date and version)
+* Remove obsolete variable $LOGLEVEL

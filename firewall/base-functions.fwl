@@ -1,0 +1,119 @@
+
+# Detects, if local host is master or slave
+detect_hostrole() {
+  hostrole='undefined'
+  case `hostname -s` in
+    $HOSTNAME_MASTER)
+      hostrole=master;;
+    $HOSTNAME_SLAVE)
+      hostrole=slave;;
+  esac
+  return 0
+}
+
+# wird nur benötigt, wenn auf dem Slave die Masterregeln geladen werden sollen
+# overrides the automatic hostrole detection; forces master into slave mode and vice versa
+detect_hostrole_override() {
+  hostrole_override='undefined'
+  if [ "$2" == "--force-role" ]; then
+    case $3 in
+        master|slave)
+          hostrole_override=$3
+          ;;
+        *)
+          echo "Unknown role '$3'"
+          return 1
+          ;;
+    esac
+  fi
+  return 0
+}
+
+get_status_filename() {
+  echo -n "${TMPDIR}ruleset-"`hostname -s`".status"
+}
+
+# speichert, welches Ruleset gerade geladen wurde und ob es dabei zu fehlern kam oder nicht.
+# set_status <ok|error> [master|slave|undefined]
+set_status() {
+  if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <ok|error> [master|slave|undefined]"
+    echo "you have at minimum to specify, if the ruleset was loaded successfully or if there where any errors."
+    return 1
+  fi
+  status=
+  : ${hostrole=undefined}
+  case "$1" in
+    ok|error) status=$1;;
+    *) echo "unknown status \"$1\""; return 1;;
+  esac
+  echo "$hostrole $status" > `get_status_filename`
+  return 0
+}
+
+# gibt den durch set_status gespeicherten Status/Ruleset Namen zurück
+get_status() {
+  statfile=`get_status_filename`
+  if [ ! -f $statfile ]; then
+    echo "undefined"
+    return 1
+  fi
+  tmp=`cat $statfile`
+  status=${tmp##* }
+  echo ${tmp%% *}
+  case $status in
+    ok) return 0;;
+    *) return 2;;
+  esac
+}
+
+initial_kernel_config() {
+  if [ $IPTABLES=="/sbin/iptables" ]; then
+    # To dynamically change kernel parameters and variables on the fly you need
+    # CONFIG_SYSCTL defined in your kernel. I would advise the following:
+
+    # Disable response to broadcasts.
+    # You don't want yourself becoming a Smurf amplifier.
+    /sbin/sysctl -q -w net.ipv4.icmp_echo_ignore_broadcasts=1
+
+    # Don't accept source routed packets. Attackers can use source routing to
+    # generate traffic pretending to be from inside your network, but which
+    # is routed back along the path from which it came, namely outside, so
+    # attackers can compromise your network. Source routing is rarely used
+    # for legitimate purposes.
+    /sbin/sysctl -q -w net.ipv4.conf.all.accept_source_route=0
+
+    # Enable bad error message protection.
+    /sbin/sysctl -q -w net.ipv4.icmp_ignore_bogus_error_responses=1
+
+    # Log spoofed packets, source routed packets, redirect packets.
+    #/sbin/sysctl -q -w net.ipv4.conf.all.log_martians=1
+    /sbin/sysctl -q -w net.ipv4.conf.all.log_martians=0
+
+    # Enable faster handshake for http requests
+    /sbin/sysctl -q -w net.ipv4.tcp_ecn=1
+
+    # Prevent ARP Flux
+    # http://linux-ip.net/html/ether-arp.html#ether-arp-flux
+    /sbin/sysctl -q -w net.ipv4.conf.all.arp_filter=1
+    /sbin/sysctl -q -w net.ipv4.conf.all.arp_ignore=1
+    /sbin/sysctl -q -w net.ipv4.conf.all.arp_announce=2
+
+    # Enable IP forwarding
+    /sbin/sysctl -q -w net.ipv4.ip_forward=1
+
+    # Load connection tracking and nat helper modules
+    /sbin/modprobe nf_conntrack_ftp
+    /sbin/modprobe nf_nat_ftp
+
+    # Raise default conntrack limit from 65536 to 256000
+    /sbin/sysctl -q -w net.netfilter.nf_conntrack_max=256000
+  fi
+}
+
+get_exclusive_lock() {
+  # removing the lockfile would not work, because the lockfile is locked till the process ends
+  #trap "flock --unlock 200; rm -f ${LOCKFILE}" EXIT
+  exec 200>${LOCKFILE}
+  flock --timeout ${LOCKTIMEOUT} 200 && return 0 || return 1
+}

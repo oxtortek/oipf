@@ -1,0 +1,47 @@
+echo -n "  Loading Interface-Config ..."
+
+# In this file usually all used network interfaces on the host should be defined.
+# To define or lets say to register an interface, you must use the following syntax.
+# Remark: All provided values are just examples!
+#
+# register_interface -n|--name <name> -r|--role <master|slave|all> \
+#                    -D|--device <dev> \
+#                    -I|--ip <a.b.c.d> -N|--network <a.b.c.d/n> -B|--broadcast <a.b.c.d> \
+#                   [-X|--register-bcast] [-R|--firewall-replication-link]
+#
+
+
+# uplink network
+#register_interface --name EXT --role master \
+#                   --device eth0 \
+#                   --ip 192.168.255.1 --network 192.168.255.0/30 --broadcast 192.168.255.4
+
+# internal network
+#register_interface --name INT --role master \
+#                   --device eth1 \
+#                   --ip 192.168.0.1 --network 192.168.1.0/24 --broadcast 192.168.1.255 \
+#                   --register-bcast
+
+# dmz network
+#register_interface --name DMZ --role master \
+#                   --device eth2 \
+#                   --ip 192.168.50.1 --network 192.168.50.0/24 --broadcast 192.168.50.255 \
+#                   --register-bcast
+
+
+
+# If you are using OIPF in HA mode, this defines the the dedicated interface
+# for communication traffic between master and slave firewall.
+# Was previously defined by IF_FWREPLI='ethN'
+#
+#register_interface --name IFL --role master \
+#                   --device eth3 \
+#                   --ip 192.168.255.5 --network 192.168.255.4/30 --broadcast 192.168.255.7 \
+#                   --firewall-replication-link
+#register_interface --name IFL --role slave \
+#                   --device eth3 \
+#                   --ip 192.168.255.6 --network 192.168.255.4/30 --broadcast 192.168.255.7 \
+#                   --firewall-replication-link
+
+
+echo " done"

@@ -1,0 +1,151 @@
+echo -n "  Loading Chain Helper Libraries ..."
+
+
+# This function sets up a new user defined chain.
+#
+# ipt_chain_begin -r|--role <master|slave|all> \
+#                 -n|--name <name of chain> \
+#                [-t|--target <target name>]
+#
+# <target name>
+#   default: ACCEPT
+#   you can also jump to other build-in or userdefined targets
+#
+ipt_chain_begin() {
+  role=''
+  name=''
+  target=''
+  while [ "$#"  -gt 0 ]; do
+    case $1 in
+        -r|--role)
+          case "$2" in
+            master|slave|all) role=$2; shift;;
+            *) echo "unknown role \"$2\""; return 1;;
+          esac;;
+        -n|--name)
+          if [ -n "$2" ]; then name=$2; shift;
+          else echo "you must specify an interface name"; return 1
+          fi;;
+        -t|--target)
+          if [ -n "$2" ]; then target=$2; shift;
+          else echo "you must specify a target name"; return 1
+          fi;;
+      *)
+        ;;
+    esac
+    shift
+  done
+  # just do it...
+  call_ipt --role $role -N $name
+  if [ -n "$target" ]; then
+    call_ipt --role $role -A $name -j $target
+  fi
+}
+
+# This function ends an already existing chain.
+#
+# ipt_chain_end -r|--role <master|slave|all> \
+#               -n|--name <name of chain> \
+#              [-t|--target <target name>] \
+#              [-p|--log-prefix <string infront of the logged packets>] \
+#              [--do-not-log]
+#
+# <target name>
+#   default: ACCEPT
+#   you can also jump to other build-in or userdefined targets
+#
+ipt_chain_end() {
+  role=''
+  name=''
+  prefix=''
+  target='DROP'
+  logit=1
+  while [ "$#"  -gt 0 ]; do
+    case $1 in
+      -r|--role)
+        case "$2" in
+          master|slave|all) role=$2; shift;;
+          *) echo "unknown role \"$2\""; return 1;;
+        esac;;
+      -n|--name)
+        if [ -n "$2" ]; then name=$2; shift;
+        else echo "you must specify an interface name"; return 1
+        fi;;
+      -t|--target)
+        if [ -n "$2" ]; then target=$2; shift;
+        else echo "you must specify a target name"; return 1
+        fi;;
+      -p|--log-prefix)
+        if [ -n "$2" ]; then prefix=$2; shift;
+        else echo "you must specify a log-prefix string"; return 1
+        fi;;
+      --do-not-log) logit=0;;
+      *)
+        ;;
+    esac
+    shift
+  done
+  # calculate log-prefix if empty
+  if [ -z "$prefix" ]; then
+    prefix="$target:$name:"
+  fi
+  # skip logging, if we are in limited logging mode and we deal with a RETURN target
+  if [ "${LIMITED_LOGGING}" -eq 1 ] && [ "$target" = 'RETURN' ]; then
+    logit=0
+  fi
+  # block chains now
+  if [ $logit -eq 1 ]; then
+    ipt_chain_log --role $role --name $name --log-prefix $prefix
+  fi
+  if [ "$target" = 'REJECT' ]; then
+    call_ipt --role $role -A $name -j REJECT --reject-with icmp-admin-prohibited
+  else
+    call_ipt --role $role -A $name -j $target
+  fi
+}
+
+
+# This function adds a logging rule to the specified chain
+#
+# ipt_chain_log -r|--role <master|slave|all> \
+#               -n|--name <name of chain> \
+#              [-p|--log-prefix <string infront of the logged packets>]
+#
+ipt_chain_log() {
+  name=''
+  role=''
+  prefix=''
+  while [ "$#"  -gt 0 ]; do
+    case $1 in
+      -r|--role)
+        case "$2" in
+          master|slave|all) role=$2; shift;;
+          *) echo "unknown role \"$2\""; return 1;;
+        esac;;
+      -n|--name)
+        if [ -n "$2" ]; then name=$2; shift;
+        else echo "you must specify an interface name"; return 1
+        fi;;
+      -p|--log-prefix)
+        if [ -n "$2" ]; then prefix=$2; shift;
+        else echo "you must specify a log-prefix string"; return 1
+        fi;;
+      *)
+        ;;
+    esac
+    shift
+  done
+  loglimit=''
+  if [ "${LIMITED_LOGGING}" -eq 1 ]; then
+    loglimit='-m limit --limit 6/h --limit-burst 5'
+  fi
+  case $LOGGING_SYSTEM in
+    ULOG)  call_ipt --role $role -A $name $loglimit -j ULOG $LOGLEVEL --ulog-prefix $prefix --ulog-nlgroup 1;;
+    NFLOG) call_ipt --role $role -A $name $loglimit -j NFLOG $LOGLEVEL --nflog-prefix $prefix --nflog-group 0;;
+    *) echo "unknown value ($LOGGING_SYSTEM) for LOGGING_SYSTEM";;
+  esac
+}
+
+
+
+echo " done"

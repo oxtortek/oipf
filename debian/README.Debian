@@ -1,0 +1,15 @@
+oipf for Debian
+---------------
+
+Some notes for those who already use the unpackaged version which resides
+completely in /etc/firewall.
+
+Many files and folders were moved or renamed:
+  /etc/firewall                   -> /etc/oipf
+  /etc/firewall/conf.d            -> /etc/oipf/conf.d
+  /etc/firewall/basefunctions.fwl -> /usr/share/oipf/basefunctions.fwl
+  /etc/firewall/libs.d            -> /usr/share/oipf/libs.d
+  /etc/firewall/rules.d           -> /etc/oipf/rules.d
+  /etc/firewall/tmp               -> /var/lib/oipf
+
+ -- Christian Schneider <christian.schneider@aoe.com>  Thu, 06 Nov 2014 11:31:43 +0100
